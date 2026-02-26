@@ -7,7 +7,7 @@ from spotapi.types.annotations import enforce
 from spotapi.status import PlayerStatus
 from spotapi.login import Login
 from spotapi.song import Song
-from typing import List
+from typing import List, Optional
 
 __all__ = ["Player", "PlayerStatus", "PlayerError"]
 
@@ -48,15 +48,25 @@ class Player(PlayerStatus):
             self.active_id = device_id if device_id else _active_id
 
         self.r_state = self.state
-        if self.r_state.play_origin is None:
-            raise ValueError("Could not get origin device ID.")
 
-        _origin_device_id = self.r_state.play_origin.device_identifier
-        if _origin_device_id is None:
-            raise ValueError("Could not get origin device ID.")
+        # play_origin.device_identifier is only populated by the web player.
+        # Desktop/mobile clients leave it None.
+        _origin_device_id: str | None = None
+        if self.r_state.play_origin is not None:
+            _origin_device_id = self.r_state.play_origin.device_identifier
 
-        self.device_id = _origin_device_id
-        self.transfer_player(self.device_id, self.active_id)
+        # _ws_phantom is the random device_id set by WebsocketStreamer.__init__()
+        # via register_device(). At this point self.device_id still holds that
+        # value because Player.__slots__ device_id hasn't been assigned yet.
+        # The "from" device for all commands must be the phantom WS device so
+        # Spotify routes responses back through our websocket connection.
+        _ws_phantom: str = self.device_id
+        self.device_id = _ws_phantom
+
+        # origin = real device that currently owns playback; used only for the
+        # initial transfer so the active device stays in control.
+        _origin = _origin_device_id if _origin_device_id else self.active_id
+        self.transfer_player(_origin, self.active_id)
 
     def transfer_player(self, from_device_id: str, to_device_id: str) -> None:
         """Transfers the player streamer from one device to another."""
@@ -358,3 +368,47 @@ class Player(PlayerStatus):
 
         # Ensure the final volume is set
         self._set_volume(self.device_id, self.active_id, volume_percent)
+
+    def play_search(self, query: str, /, *, index: int = 0) -> str:
+        """
+        Searches for a track and immediately queues and plays it.
+
+        Parameters
+        ----------
+        query : str
+            The search query (song name, artist, etc.).
+        index : int, optional
+            Which result from the search to pick. Defaults to 0 (first result).
+
+        Returns
+        -------
+        str
+            The Spotify track URI that was queued and played.
+
+        Raises
+        ------
+        ValueError
+            If no results are found for the given query.
+        """
+        # Import here to avoid circular imports (Public -> Song -> player chain)
+        from spotapi.public import Public
+
+        results = Public.song_search(query)
+        first_chunk = next(results, None)
+        results.close()
+
+        if not first_chunk:
+            raise ValueError(f"No search results found for query: {query!r}")
+
+        items = list(first_chunk)
+        if index >= len(items):
+            raise ValueError(
+                f"Index {index} out of range: only {len(items)} results returned."
+            )
+
+        track_uri: str = items[index]["item"]["data"]["uri"]
+
+        self._add_to_queue(self.device_id, self.active_id, track_uri)
+        self.run_command(self.device_id, self.active_id, "skip_next")
+
+        return track_uri

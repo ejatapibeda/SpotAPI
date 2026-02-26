@@ -20,6 +20,7 @@ from spotapi.exceptions import *
 from spotapi.utils import *
 from spotapi.podcast import *
 from spotapi.public import *
+from spotapi.session import SpotifySession
 
 
 __author__ = "Aran"

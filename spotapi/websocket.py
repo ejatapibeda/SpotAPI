@@ -73,10 +73,14 @@ class WebsocketStreamer:
                 "brand": "spotify",
                 "capabilities": {
                     "change_volume": True,
-                    "enable_play_token": True,
+                    # Setting enable_play_token to False prevents this phantom
+                    # device from stealing the play token away from the real
+                    # PC/mobile client, which was causing Spotify to log out
+                    # or interrupt playback on the actual device.
+                    "enable_play_token": False,
                     "supports_file_media_type": True,
                     "play_token_lost_behavior": "pause",
-                    "disable_connect": False,
+                    "disable_connect": True,
                     "audio_podcasts": True,
                     "video_playback": True,
                     "manifest_formats": [

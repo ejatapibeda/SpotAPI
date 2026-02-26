@@ -29,6 +29,16 @@ _secret_cache: Tuple[int, bytearray] | None = None
 _cache_expiry: float = -1
 _CACHE_TTL = 15 * 60
 
+# Module-level session cache — shared across all BaseClient instances
+# so repeated PlayerStatus/Player construction doesn't hammer Spotify's API.
+_session_cache: dict = {}
+_session_cache_expiry: float = -1
+_SESSION_CACHE_TTL = 55 * 60  # access tokens typically expire after 60 min
+
+_client_token_cache: str | None = None
+_client_token_expiry: float = -1
+_CLIENT_TOKEN_TTL = 55 * 60
+
 __all__ = ["BaseClient", "BaseClientError"]
 
 
@@ -146,6 +156,17 @@ class BaseClient:
             self.client_id = resp.response["clientId"]
 
     def get_session(self) -> None:
+        global _session_cache, _session_cache_expiry
+
+        # Return cached session data if still valid — avoids hammering open.spotify.com
+        if _session_cache and time.time() < _session_cache_expiry:
+            self.js_pack = _session_cache["js_pack"]
+            self.client_version = _session_cache["client_version"]
+            self.device_id = _session_cache["device_id"]
+            self.access_token = _session_cache["access_token"]
+            self.client_id = _session_cache["client_id"]
+            return
+
         resp = self.client.get("https://open.spotify.com")
         if resp.fail:
             raise BaseClientError("Could not get session", error=resp.error.string)
@@ -176,7 +197,24 @@ class BaseClient:
         self.device_id = self.client.cookies.get("sp_t") or ""
         self._get_auth_vars()
 
+        # Store in module-level cache
+        _session_cache = {
+            "js_pack": self.js_pack,
+            "client_version": self.client_version,
+            "device_id": self.device_id,
+            "access_token": self.access_token,
+            "client_id": self.client_id,
+        }
+        _session_cache_expiry = time.time() + _SESSION_CACHE_TTL
+
     def get_client_token(self) -> None:
+        global _client_token_cache, _client_token_expiry
+
+        # Return cached client token if still valid
+        if _client_token_cache and time.time() < _client_token_expiry:
+            self.client_token = _client_token_cache
+            return
+
         if not (self.client_id and self.device_id and self.client_version):
             self.get_session()
 
@@ -215,6 +253,10 @@ class BaseClient:
             raise BaseClientError("Invalid JSON")
 
         self.client_token = resp.response["granted_token"]["token"]
+
+        # Store in module-level cache
+        _client_token_cache = self.client_token
+        _client_token_expiry = time.time() + _CLIENT_TOKEN_TTL
 
     def part_hash(self, name: str) -> str:
         if self.raw_hashes is _Undefined:

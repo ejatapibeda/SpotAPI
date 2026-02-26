@@ -146,15 +146,24 @@ class TLSClient(Session):
                 else url.decode("utf-8")
             )
 
+        import time as _time
+
         err = "Unknown"
-        for _ in range(self.auto_retries):
+        for attempt in range(self.auto_retries):
             try:
                 response = self.execute_request(method.upper(), url, **kwargs)
             except TLSClientExeption as e:
                 err = str(e)
+                _time.sleep(min(2 ** attempt, 8))
                 continue
-            else:
-                return response
+
+            # Retry on transient server errors (503 / 504) with exponential backoff
+            if response.status_code in (503, 504) and attempt < self.auto_retries - 1:
+                err = f"HTTP {response.status_code}"
+                _time.sleep(min(2 ** attempt, 8))
+                continue
+
+            return response
 
         raise RequestError("Failed to complete request.", error=err)
 

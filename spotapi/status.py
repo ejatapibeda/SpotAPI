@@ -106,17 +106,14 @@ class PlayerStatus(WebsocketStreamer):
         )
 
     @property
-    def active_device_id(self) -> str:
-        """Gets the active device ID of the player."""
+    def active_device_id(self) -> str | None:
+        """Gets the active device ID of the player. Returns None if no device is active."""
         self.renew_state()
 
-        if (
-            self._device_dump is None
-            or self._device_dump.get("active_device_id") is None
-        ):
-            raise ValueError("Could not get active device ID")
+        if self._device_dump is None:
+            return None
 
-        return self._device_dump["active_device_id"]
+        return self._device_dump.get("active_device_id")
 
     @property
     def next_song_in_queue(self) -> Track | None:
