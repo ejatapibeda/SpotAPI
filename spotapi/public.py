@@ -92,6 +92,15 @@ class Public:
             client_pool.put(client)
 
     @staticmethod
+    def playlist_search(query: str, /) -> GeneratorType:
+        client = client_pool.get()
+        song = Song(client=client)
+        try:
+            yield from song.paginate_playlists(query)
+        finally:
+            client_pool.put(client)
+
+    @staticmethod
     def song_info(song_id: str, /) -> Mapping[str, Any]:
         client = client_pool.get()
         song = Song(client=client)

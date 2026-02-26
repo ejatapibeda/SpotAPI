@@ -412,3 +412,57 @@ class Player(PlayerStatus):
         self.run_command(self.device_id, self.active_id, "skip_next")
 
         return track_uri
+
+    def play_playlist_search(self, query: str, /, *, index: int = 0) -> str:
+        """
+        Searches for a playlist and immediately plays it.
+
+        Parameters
+        ----------
+        query : str
+            The search query for the playlist.
+        index : int, optional
+            Which result from the search to pick. Defaults to 0 (first result).
+
+        Returns
+        -------
+        str
+            The Spotify playlist URI that was played.
+
+        Raises
+        ------
+        ValueError
+            If no results are found for the given query, or if the playlist is empty.
+        """
+        from spotapi.public import Public
+
+        results = Public.playlist_search(query)
+        first_chunk = next(results, None)
+        results.close()
+
+        if not first_chunk:
+            raise ValueError(f"No search results found for query: {query!r}")
+
+        items = list(first_chunk)
+        if index >= len(items):
+            raise ValueError(
+                f"Index {index} out of range: only {len(items)} results returned."
+            )
+
+        playlist_uri: str = items[index]["data"]["uri"]
+        playlist_id = playlist_uri.split("playlist:")[-1]
+
+        # To play a playlist directly, we need a track inside it to start with
+        _playlist = PublicPlaylist(playlist_id).paginate_playlist()
+        first_playlist_chunk = next(_playlist, None)
+        _playlist.close()
+
+        if not first_playlist_chunk or not first_playlist_chunk["items"]:
+            raise ValueError(f"Playlist {playlist_uri} is empty.")
+
+        first_track_uri = first_playlist_chunk["items"][0]["itemV2"]["data"]["uri"]
+        first_track_uid = first_playlist_chunk["items"][0]["uid"]
+        
+        self._play_song(self.device_id, self.active_id, first_track_uri, playlist_uri, first_track_uid)
+
+        return playlist_uri

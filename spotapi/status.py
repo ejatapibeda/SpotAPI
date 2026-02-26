@@ -47,8 +47,8 @@ class PlayerStatus(WebsocketStreamer):
 
     def renew_state(self) -> None:
         self._device_dump = self.connect_device()
-        self._state = self._device_dump["player_state"]
-        self._devices = self._device_dump["devices"]
+        self._state = self._device_dump.get("player_state")
+        self._devices = self._device_dump.get("devices")
 
     @functools.cached_property
     def saved_state(self) -> PlayerState:

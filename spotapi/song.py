@@ -134,6 +134,29 @@ class Song:
             ]["tracksV2"]["items"]
             offset += UPPER_LIMIT
 
+    def paginate_playlists(self, query: str, /) -> Generator[Mapping[str, Any], None, None]:
+        """
+        Generator that fetches playlists in chunks
+
+        Note: If total_count <= 100, then there is no need to paginate
+        """
+        UPPER_LIMIT: int = 100
+        # We need to get the total playlists first
+        items = self.query_songs(query, limit=UPPER_LIMIT)
+        total_count: int = items["data"]["searchV2"]["playlists"]["totalCount"]
+
+        yield items["data"]["searchV2"]["playlists"]["items"]
+
+        if total_count <= UPPER_LIMIT:
+            return
+
+        offset = UPPER_LIMIT
+        while offset < total_count:
+            yield self.query_songs(query, limit=UPPER_LIMIT, offset=offset)["data"][
+                "searchV2"
+            ]["playlists"]["items"]
+            offset += UPPER_LIMIT
+
     def add_songs_to_playlist(self, song_ids: List[str], /) -> None:
         """Adds multiple songs to the playlist"""
         # This can be a bit slow when adding 500+ songs, maybe we should add a batch processing
