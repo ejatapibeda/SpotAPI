@@ -1,15 +1,27 @@
 from __future__ import annotations
 
-from typing import Any, Callable, Type, Dict
-from tls_client.settings import ClientIdentifiers
-from tls_client.exceptions import TLSClientExeption
-from tls_client.response import Response as TLSResponse
+from typing import Any, Callable, Type, Dict, TYPE_CHECKING
 from spotapi.exceptions import ParentException, RequestError
 from spotapi.http.data import Response
-from tls_client import Session
 import requests
 import atexit
 import json
+
+# tls_client ships prebuilt native binaries; it may be unavailable on some
+# architectures (e.g. ARM Linux).  Import lazily so the rest of spotapi
+# (Login, SpotifySession, etc.) still works without TLSClient.
+try:
+    from tls_client.settings import ClientIdentifiers
+    from tls_client.exceptions import TLSClientExeption
+    from tls_client.response import Response as TLSResponse
+    from tls_client import Session as _TLSSession
+    _TLS_AVAILABLE = True
+except Exception:
+    _TLS_AVAILABLE = False
+    ClientIdentifiers = None  # type: ignore[assignment,misc]
+    TLSClientExeption = Exception  # type: ignore[assignment,misc]
+    TLSResponse = None  # type: ignore[assignment]
+    _TLSSession = object  # type: ignore[assignment,misc]
 
 __all__ = [
     "StdClient",
@@ -18,19 +30,16 @@ __all__ = [
     "ParentException",
     "RequestError",
     "Response",
+    "_TLS_AVAILABLE",
 ]
 
 
 class StdClient:
     """
     Standard HTTP Client implementation wrapped around the requests library.
+    Compatible drop-in for TLSClient on platforms where tls_client is unavailable
+    (e.g. ARM Linux).
     """
-
-    __slots__ = (
-        "_client",
-        "auto_retries",
-        "authenticate",
-    )
 
     def __init__(
         self,
@@ -40,7 +49,21 @@ class StdClient:
         self._client = requests.Session()
         self.auto_retries = auto_retries + 1
         self.authenticate = auth_rule
+        self.fail_exception = None
+        # Mimic a Chrome 120 TLS profile identifier so BaseClient can parse a version
+        self.client_identifier: str = "chrome_120"
         atexit.register(self._client.close)
+
+    @property
+    def cookies(self):
+        return self._client.cookies
+
+    @property
+    def headers(self):
+        return self._client.headers
+
+    def close(self) -> None:
+        self._client.close()
 
     def __call__(self, method: str, url: str, **kwargs) -> requests.Response | None:
         return self.build_request(method, url, **kwargs)
@@ -108,7 +131,7 @@ class StdClient:
         return self.request("PUT", url, authenticate=authenticate, **kwargs)
 
 
-class TLSClient(Session):
+class TLSClient(_TLSSession):
     """
     TLS-HTTP Client implementation wrapped around the tls_client library.
 
@@ -123,6 +146,11 @@ class TLSClient(Session):
         auto_retries: int = 0,
         auth_rule: Callable[[Dict[Any, Any]], Dict[Any, Any]] | None = None,
     ) -> None:
+        if not _TLS_AVAILABLE:
+            raise ImportError(
+                "tls_client is not available on this platform (no native binary for this arch).\n"
+                "Use StdClient instead, or install a compatible tls_client build."
+            )
         super().__init__(client_identifier=profile, random_tls_extension_order=True)
 
         if proxy:

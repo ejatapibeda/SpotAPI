@@ -3,14 +3,18 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Union
 from requests import Response as StdResponse
-from tls_client.response import Response as TLSResponse
+
+try:
+    from tls_client.response import Response as TLSResponse
+except Exception:
+    TLSResponse = StdResponse  # type: ignore[assignment,misc]
 
 __all__ = ["Response", "Error", "StdResponse", "TLSResponse"]
 
 # Dataclass needs to be here to avoid circular imports
 @dataclass
 class Response:
-    raw: TLSResponse | StdResponse
+    raw: Any  # TLSResponse | StdResponse — kept as Any for ARM compat
     status_code: int
     response: Any
 

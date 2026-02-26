@@ -11,7 +11,7 @@ from spotapi.utils.logger import Logger
 from spotapi.types.annotations import enforce
 from spotapi.types.alias import _UStr, _Undefined
 from spotapi.exceptions import BaseClientError
-from spotapi.http.request import TLSClient
+from spotapi.http.request import TLSClient, StdClient
 from spotapi.utils.strings import extract_js_links, extract_mappings, combine_chunks
 
 # Default recaptcha site key, will update on startup if necessary
@@ -93,7 +93,7 @@ class BaseClient:
     raw_hashes: _UStr = _Undefined
     language: str = "en"
 
-    def __init__(self, client: TLSClient, language: str = "en") -> None:
+    def __init__(self, client: TLSClient | StdClient, language: str = "en") -> None:
         self.client = client
         self.language = language
         self.client.authenticate = lambda kwargs: self._auth_rule(kwargs)

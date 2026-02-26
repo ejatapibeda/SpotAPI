@@ -1,9 +1,16 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from spotapi.http.request import TLSClient
+from spotapi.http.request import TLSClient, StdClient, _TLS_AVAILABLE
 from typing import List, Dict, Any, Union
 from spotapi.types.interfaces import CaptchaProtocol, LoggerProtocol
+
+
+def _default_client() -> TLSClient | StdClient:
+    """Return TLSClient on platforms that support it, StdClient elsewhere."""
+    if _TLS_AVAILABLE:
+        return TLSClient("chrome_120", "", auto_retries=3)
+    return StdClient(auto_retries=3)
 
 __all__ = [
     "Config",
@@ -30,7 +37,7 @@ __all__ = [
 class Config:
     logger: LoggerProtocol
     solver: CaptchaProtocol | None = field(default=None)
-    client: TLSClient = field(default=TLSClient("chrome_120", "", auto_retries=3))
+    client: TLSClient | StdClient = field(default_factory=_default_client)
 
     def __str__(self) -> str:
         return "Config()"
