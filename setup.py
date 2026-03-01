@@ -11,12 +11,10 @@ __install_require__ = [
     "validators",
     "pyotp",
     "beautifulsoup4",
+    "websockets",
+    "redis",
+    "pymongo",
 ]
-__extras__ = {
-    "websocket": ["websockets"],
-    "redis": ["redis"],
-    "pymongo": ["pymongo"],
-}
 
 with open("README.md", "r") as f:
     long_description = f.read()
@@ -27,7 +25,6 @@ setup(
     description=__description__,
     packages=find_packages(),
     install_requires=__install_require__,
-    extras_require=__extras__,
     keywords=[
         "Spotify",
         "API",
