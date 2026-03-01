@@ -5,6 +5,7 @@ import atexit
 import json
 import time
 import signal
+import os
 from typing import Any, Dict
 from spotapi.login import Login
 from spotapi.client import BaseClient
@@ -36,6 +37,7 @@ class WebsocketStreamer:
         "ws_dump",
         "connection_id",
         "keep_alive_thread",
+        "_closed",
     )
 
     def __init__(self, login: Login) -> None:
@@ -58,12 +60,13 @@ class WebsocketStreamer:
 
         self.rlock = threading.Lock()
         self.ws_dump: Dict[Any, Any] | None = None
+        self._closed = False
         self.connection_id = self.get_init_packet()
 
         self.keep_alive_thread = threading.Thread(target=self.keep_alive, daemon=True)
         self.keep_alive_thread.start()
 
-        atexit.register(self.ws.close)
+        atexit.register(self.close)
         signal.signal(signal.SIGINT, self.handle_interrupt)
 
     def register_device(self) -> None:
@@ -139,12 +142,14 @@ class WebsocketStreamer:
         return resp.response
 
     def keep_alive(self) -> None:
-        while True:
+        while not self._closed:
             try:
                 time.sleep(60)
+                if self._closed:
+                    break
                 with self.rlock:
                     self.ws.send('{"type":"ping"}')
-            except (ConnectionError, KeyboardInterrupt):
+            except (ConnectionError, KeyboardInterrupt, Exception):
                 break
 
     def get_packet(self) -> Dict[Any, Any]:
@@ -165,7 +170,17 @@ class WebsocketStreamer:
 
         return packet["headers"]["Spotify-Connection-Id"]
 
+    def close(self) -> None:
+        """Cleanly shut down the WebSocket connection."""
+        if self._closed:
+            return
+        self._closed = True
+        try:
+            self.ws.close()
+        except Exception:
+            pass
+
     def handle_interrupt(self, signum: int, frame: Any) -> None:
         """Handle interrupt signal (Ctrl+C)"""
-        self.ws.close()
-        exit(0)
+        self.close()
+        os._exit(0)
